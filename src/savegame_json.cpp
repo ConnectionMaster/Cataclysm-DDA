@@ -1462,9 +1462,9 @@ void Character::store( JsonOut &json ) const
     json.start_array();
     for( const auto &elem : known_traps ) {
         json.start_object();
-        json.member( "x", elem.first.x );
-        json.member( "y", elem.first.y );
-        json.member( "z", elem.first.z );
+        json.member( "x", elem.first.x() );
+        json.member( "y", elem.first.y() );
+        json.member( "z", elem.first.z() );
         json.member( "trap", elem.second );
         json.end_object();
     }
@@ -2902,6 +2902,7 @@ void item::io( Archive &archive )
     archive.io( "specific_energy", specific_energy, units::from_joule_per_gram( -10.f ) );
     archive.io( "temperature", temperature, units::from_kelvin( 0.f ) );
     archive.io( "recipe_charges", recipe_charges, 1 );
+    archive.io( "template_traits", template_traits );
     // Legacy: remove flag check/unset after 0.F
     archive.io( "ethereal", ethereal, has_flag( flag_ETHEREAL_ITEM ) );
     unset_flag( flag_ETHEREAL_ITEM );
