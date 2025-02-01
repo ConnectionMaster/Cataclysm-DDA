@@ -15,6 +15,7 @@
     "id": "afs_earthling",
     "name": "Earth born",
     "description": "Your mannerisms and accent are a dead giveaway that you were raised on Earth.  Whatever your thoughts about the homeworld might be, the simple fact that you can call it home is likely to affect relationships with people liable to care about such things.",
+    "traits": [ "BKGR_EARTH" ],
     "points": -1
   },
   {
@@ -44,6 +45,51 @@
     "description": "You have a natural talent for leadership and can easily see yourself in others.  Quite literally.  In fact, you can swap control to any other character that follows you.",
     "points": 3,
     "traits": [ "AFS_LEADERSHIP" ]
+  },
+  {
+    "type": "profession",
+    "subtype": "hobby",
+    "id": "afs_physical_stat_genemod",
+    "name": "Genemod: Physical Ability",
+    "description": "Much more common in the Hyperspace Era, the rich or those from Earth still have access to genemodding technology designed to make humanity better.  This is the suite of improvements to increase strength, coordination, and sensory ability as well as fix problems such as nearsightedness.",
+    "points": 2,
+    "traits": [ "AFS_PHYSICAL_CAPABILITY_GENEMOD" ]
+  },
+  {
+    "type": "profession",
+    "subtype": "hobby",
+    "id": "afs_mental_stat_genemod",
+    "name": "Genemod: Mental Acuity",
+    "description": "Much more common in the Hyperspace Era, the rich or those from Earth still have access to genemodding technology designed to make humanity better.  This is the suite of improvements to increase mental flexibility and memorization.",
+    "points": 2,
+    "traits": [ "AFS_MENTAL_CAPABILITY_GENEMOD" ]
+  },
+  {
+    "type": "profession",
+    "subtype": "hobby",
+    "id": "afs_health_genemod",
+    "name": "Genemod: Improved Health",
+    "description": "Much more common in the Hyperspace Era, the rich or those from Earth still have access to genemodding technology designed to make humanity better.  This is the suite of improvements to health, providing increased healing speed and resistance to disease and infection.",
+    "points": 2,
+    "traits": [ "AFS_HEALTH_CAPABILITY_GENEMOD" ]
+  },
+  {
+    "type": "profession",
+    "subtype": "hobby",
+    "id": "afs_efficiency_genemod",
+    "name": "Genemod: Efficient System",
+    "description": "Much more common in the Hyperspace Era, the rich or those from Earth still have access to genemodding technology designed to make humanity better.  This is the suite of improvements to recovery, allowing a quicker sleep cycle and faster return to baseline after exertion.",
+    "points": 2,
+    "traits": [ "AFS_RECOVERY_CAPABILITY_GENEMOD" ]
+  },
+  {
+    "type": "profession",
+    "subtype": "hobby",
+    "id": "afs_beauty_genemod",
+    "name": "Genemod: Beauty",
+    "description": "Much more common in the Hyperspace Era, the rich or those from Earth still have access to genemodding technology designed to make humanity better.  This is the suite of improvements to physical appearance, offering clearer skin, more striking features, increased facial symmetry, and removing signs of aging.",
+    "points": 2,
+    "traits": [ "AFS_BEAUTY_GENEMOD" ]
   },
   {
     "type": "profession",

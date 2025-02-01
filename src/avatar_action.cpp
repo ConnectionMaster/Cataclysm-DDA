@@ -406,7 +406,7 @@ bool avatar_action::move( avatar &you, map &m, const tripoint_rel_ms &d )
             }
             you.melee_attack( critter, true );
             if( critter.is_hallucination() ) {
-                critter.die( &you );
+                critter.die( &m, &you );
             }
             g->draw_hit_mon( dest_loc, critter, critter.is_dead() );
             return false;
@@ -655,7 +655,7 @@ void avatar_action::swim( map &m, avatar &you, const tripoint_bub_ms &p )
             return;
         }
     }
-    tripoint_abs_ms old_abs_pos = m.getglobal( you.pos_bub() );
+    tripoint_abs_ms old_abs_pos = m.get_abs( you.pos_bub() );
     you.setpos( p );
     g->update_map( you );
 

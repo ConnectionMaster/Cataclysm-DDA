@@ -333,7 +333,7 @@ void mapgen_subway( mapgendata &dat )
     switch( num_dirs ) {
         case 4:
             // 4-way intersection
-            mapf::formatted_set_simple( m, point::zero,
+            mapf::formatted_set_simple( m, point_bub_ms::zero,
                                         "..^/D^^/D^....^D/^^D/^..\n"
                                         ".^/DX^/DX......XD/^XD/^.\n"
                                         "^/D^X/D^X......X^D/X^D/^\n"
@@ -375,7 +375,7 @@ void mapgen_subway( mapgendata &dat )
             break;
         case 3:
             // tee
-            mapf::formatted_set_simple( m, point::zero,
+            mapf::formatted_set_simple( m, point_bub_ms::zero,
                                         "..^/D^^/D^...^/D^^/D^...\n"
                                         ".^/D^^/D^...^/D^^/D^....\n"
                                         "^/D^^/D^...^/D^^/D^.....\n"
@@ -422,7 +422,7 @@ void mapgen_subway( mapgendata &dat )
         case 2:
             // straight or diagonal
             if( diag ) { // diagonal subway get drawn differently from all other types
-                mapf::formatted_set_simple( m, point::zero,
+                mapf::formatted_set_simple( m, point_bub_ms::zero,
                                             "...^DD^^DD^...^DD^^DD^..\n"
                                             "....^DD^^DD^...^DD^^DD^.\n"
                                             ".....^DD^^DD^...^DD^^DD^\n"
@@ -458,7 +458,7 @@ void mapgen_subway( mapgendata &dat )
                                                     furn_str_id::NULL_ID(),
                                                     furn_str_id::NULL_ID() ) );
             } else { // normal subway drawing
-                mapf::formatted_set_simple( m, point::zero,
+                mapf::formatted_set_simple( m, point_bub_ms::zero,
                                             "...^X^^^X^....^X^^^X^...\n"
                                             "...-x---x-....-x---x-...\n"
                                             "...^X^^^X^....^X^^^X^...\n"
@@ -501,7 +501,7 @@ void mapgen_subway( mapgendata &dat )
             break;
         case 1:
             // dead end
-            mapf::formatted_set_simple( m, point::zero,
+            mapf::formatted_set_simple( m, point_bub_ms::zero,
                                         "...^X^^^X^..../D^^/D^...\n"
                                         "...-x---x-.../DX^/DX^...\n"
                                         "...^X^^^X^../D^X/D^X^...\n"
@@ -774,7 +774,7 @@ void mapgen_forest( mapgendata &dat )
     for( int bd_x = 0; bd_x < 2; bd_x++ ) {
         for( int bd_y = 0; bd_y < 2; bd_y++ ) {
             // Use the corners of the overmap tiles as hash seeds.
-            point_abs_ms global_corner = m->getglobal( tripoint_bub_ms( bd_x * SEEX * 2, bd_y * SEEY * 2,
+            point_abs_ms global_corner = m->get_abs( tripoint_bub_ms( bd_x * SEEX * 2, bd_y * SEEY * 2,
                                          m->get_abs_sub().z() ) ).xy();
             uint32_t net_hash = std::hash<uint32_t> {}( global_corner.x() ) ^ ( std::hash<int> {}( global_corner.y() )
                                 << 1 );
@@ -2202,7 +2202,7 @@ void mremove_trap( map *m, const tripoint_bub_ms &p, trap_id type )
 void mtrap_set( map *m, const tripoint_bub_ms &p, trap_id type, bool avoid_creatures )
 {
     if( avoid_creatures ) {
-        Creature *c = get_creature_tracker().creature_at( m->getglobal( p ), true );
+        Creature *c = get_creature_tracker().creature_at( m->get_abs( p ), true );
         if( c ) {
             return;
         }
@@ -2213,7 +2213,7 @@ void mtrap_set( map *m, const tripoint_bub_ms &p, trap_id type, bool avoid_creat
 void mtrap_set( tinymap *m, const point_omt_ms &p, trap_id type, bool avoid_creatures )
 {
     if( avoid_creatures ) {
-        Creature *c = get_creature_tracker().creature_at( m->getglobal( tripoint_omt_ms( p,
+        Creature *c = get_creature_tracker().creature_at( m->get_abs( tripoint_omt_ms( p,
                       m->get_abs_sub().z() ) ), true );
         if( c ) {
             return;

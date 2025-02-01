@@ -102,6 +102,7 @@
 #include "string_id_utils.h"
 #include "text_snippets.h"
 #include "translations.h"
+#include "trait_group.h"
 #include "trap.h"
 #include "try_parse_integer.h"
 #include "units.h"
@@ -130,8 +131,6 @@ static const ammotype ammo_battery( "battery" );
 static const ammotype ammo_bolt( "bolt" );
 static const ammotype ammo_money( "money" );
 static const ammotype ammo_plutonium( "plutonium" );
-
-static const attack_vector_id attack_vector_vector_null( "vector_null" );
 
 static const bionic_id bio_digestion( "bio_digestion" );
 
@@ -163,6 +162,7 @@ static const item_category_id item_category_container( "container" );
 static const item_category_id item_category_drugs( "drugs" );
 static const item_category_id item_category_food( "food" );
 static const item_category_id item_category_maps( "maps" );
+static const item_category_id item_category_software( "software" );
 static const item_category_id item_category_spare_parts( "spare_parts" );
 static const item_category_id item_category_tools( "tools" );
 static const item_category_id item_category_weapons( "weapons" );
@@ -178,6 +178,8 @@ static const itype_id itype_corpse( "corpse" );
 static const itype_id itype_corpse_generic_human( "corpse_generic_human" );
 static const itype_id itype_craft( "craft" );
 static const itype_id itype_disassembly( "disassembly" );
+static const itype_id itype_efile_photos( "efile_photos" );
+static const itype_id itype_efile_recipes( "efile_recipes" );
 static const itype_id itype_hand_crossbow( "hand_crossbow" );
 static const itype_id itype_joint_lit( "joint_lit" );
 static const itype_id itype_power_cord( "power_cord" );
@@ -366,6 +368,12 @@ item::item( const itype *type, time_point turn, int qty ) : type( type ), bday( 
         itype_id nanofab_recipe =
             item_group::item_from( type->nanofab_template_group ).typeId();
         set_var( "NANOFAB_ITEM_ID", nanofab_recipe.str() );
+    }
+
+    if( type->trait_group.is_valid() ) {
+        for( const trait_and_var &tr : trait_group::traits_from( type->trait_group ) ) {
+            template_traits.push_back( tr.trait );
+        }
     }
 
     select_itype_variant();
@@ -1283,10 +1291,6 @@ item item::in_container( const itype_id &cont, int qty, bool sealed,
         }
         container.add_automatic_whitelist();
         return container;
-    } else if( is_software() && container.is_software_storage() ) {
-        container.put_in( *this, pocket_type::SOFTWARE );
-        container.invlet = invlet;
-        return container;
     }
     return *this;
 }
@@ -1355,6 +1359,7 @@ void item::update_modified_pockets()
 
 int item::charges_per_volume( const units::volume &vol, bool suppress_warning ) const
 {
+    int64_t ret;
     if( count_by_charges() ) {
         if( type->volume == 0_ml ) {
             if( !suppress_warning ) {
@@ -1364,7 +1369,7 @@ int item::charges_per_volume( const units::volume &vol, bool suppress_warning ) 
         }
         // Type cast to prevent integer overflow with large volume containers like the cargo
         // dimension
-        return vol * static_cast<int64_t>( type->stack_size ) / type->volume;
+        ret = vol * static_cast<int64_t>( type->stack_size ) / type->volume;
     } else {
         units::volume my_volume = volume();
         if( my_volume == 0_ml ) {
@@ -1373,30 +1378,24 @@ int item::charges_per_volume( const units::volume &vol, bool suppress_warning ) 
             }
             return INFINITE_CHARGES;
         }
-        return vol / my_volume;
+        ret = vol / my_volume;
     }
+    return std::min( ret, static_cast<int64_t>( INFINITE_CHARGES ) );
 }
 
 int item::charges_per_weight( const units::mass &m, bool suppress_warning ) const
 {
-    if( count_by_charges() ) {
-        if( type->weight == 0_gram ) {
-            if( !suppress_warning ) {
-                debugmsg( "Item '%s' with zero weight", tname() );
-            }
-            return INFINITE_CHARGES;
+    int64_t ret;
+    units::mass my_weight = count_by_charges() ? type->weight : weight();
+    if( my_weight == 0_gram ) {
+        if( !suppress_warning ) {
+            debugmsg( "Item '%s' with zero weight", tname() );
         }
-        return m / type->weight;
+        ret = INFINITE_CHARGES;
     } else {
-        units::mass my_weight = weight();
-        if( my_weight == 0_gram ) {
-            if( !suppress_warning ) {
-                debugmsg( "Item '%s' with zero weight", tname() );
-            }
-            return INFINITE_CHARGES;
-        }
-        return m / my_weight;
+        ret = m / my_weight;
     }
+    return std::min( ret, static_cast<int64_t>( INFINITE_CHARGES ) );
 }
 
 bool item::display_stacked_with( const item &rhs, bool check_components ) const
@@ -1510,7 +1509,7 @@ bool _stacks_location_hint( item const &lhs, item const &rhs )
     if( this_loc == that_loc ) {
         return true;
     } else if( this_loc != tripoint_abs_omt::max && that_loc != tripoint_abs_omt::max ) {
-        const tripoint_abs_omt player_loc( coords::project_to<coords::omt>( get_map().getglobal(
+        const tripoint_abs_omt player_loc( coords::project_to<coords::omt>( get_map().get_abs(
                                                get_player_character().pos_bub() ) ) );
         const int this_dist = rl_dist( player_loc, this_loc );
         const int that_dist = rl_dist( player_loc, that_loc );
@@ -1727,6 +1726,7 @@ stacking_info item::stacks_with( const item &rhs, bool check_components, bool co
     // Guns that differ only by dirt/shot_counter can still stack,
     // but other item_vars such as label/note will prevent stacking
     static const std::set<std::string> ignore_keys = { "dirt", "shot_counter", "spawn_location_omt", "ethereal", "last_act_by_char_id" };
+    bits.set( tname::segments::TRAITS, template_traits == rhs.template_traits );
     bits.set( tname::segments::VARS, map_equal_ignoring_keys( item_vars, rhs.item_vars, ignore_keys ) );
     bits.set( tname::segments::ETHEREAL, _stacks_ethereal( *this, rhs ) );
     bits.set( tname::segments::LOCATION_HINT, _stacks_location_hint( *this, rhs ) );
@@ -1763,6 +1763,9 @@ stacking_info item::stacks_with( const item &rhs, bool check_components, bool co
     bits.set( tname::segments::LINK,
               link_length() == rhs.link_length() && max_link_length() == rhs.max_link_length() );
     bits.set( tname::segments::MODS, _stacks_mods( *this, rhs ) );
+    //checking browsed status is not necessary, equal vars are checked earlier
+    bits.set( tname::segments::EMEMORY,
+              occupied_ememory() == rhs.occupied_ememory() && total_ememory() == rhs.total_ememory() );
     bits.set( tname::segments::last_segment );
 
     // only check contents if everything else matches
@@ -2309,8 +2312,8 @@ double item::effective_dps( const Character &guy, Creature &mon ) const
         Creature *temp_mon = &mon;
         double subtotal_damage = 0;
         damage_instance base_damage;
-        guy.roll_all_damage( crit, base_damage, true, *this, attack_vector_vector_null,
-                             sub_body_part_sub_limb_debug, &mon, bp );
+        guy.roll_all_damage( crit, base_damage, true, *this, attack_vector_id::NULL_ID(),
+                             sub_bodypart_str_id::NULL_ID(), &mon, bp );
         damage_instance dealt_damage = base_damage;
         dealt_damage = guy.modify_damage_dealt_with_enchantments( dealt_damage );
         // TODO: Modify DPS calculation to consider weakpoints.
@@ -2336,8 +2339,8 @@ double item::effective_dps( const Character &guy, Creature &mon ) const
         if( has_technique( RAPID ) ) {
             Creature *temp_rs_mon = &mon;
             damage_instance rs_base_damage;
-            guy.roll_all_damage( crit, rs_base_damage, true, *this, attack_vector_vector_null,
-                                 sub_body_part_sub_limb_debug, &mon, bp );
+            guy.roll_all_damage( crit, rs_base_damage, true, *this, attack_vector_id::NULL_ID(),
+                                 sub_bodypart_str_id::NULL_ID(), &mon, bp );
             damage_instance dealt_rs_damage = rs_base_damage;
             for( damage_unit &dmg_unit : dealt_rs_damage.damage_units ) {
                 dmg_unit.damage_multiplier *= 0.66;
@@ -2448,6 +2451,10 @@ void item::basic_info( std::vector<iteminfo> &info, const iteminfo_query *parts,
                            string_format( "<num> %s", length_units( length() ) ),
                            iteminfo::lower_is_better,
                            convert_length( length() ), length().value() );
+    }
+    if( parts->test( iteminfo_parts::BASE_EMEMORY ) && ememory_size() > 0_KB ) {
+        info.emplace_back( "BASE", string_format( "%s %s", _( "Memory:" ),
+                           units::display( ememory_size() ) ) );
     }
     if( parts->test( iteminfo_parts::BASE_OWNER ) && !owner.is_null() ) {
         info.emplace_back( "BASE", string_format( _( "Owner: %s" ),
@@ -4892,6 +4899,21 @@ void item::tool_info( std::vector<iteminfo> &info, const iteminfo_query *parts, 
         info.emplace_back( "DESCRIPTION", feedback );
     }
 
+    std::string &eport = type->tool->e_port;
+    if( !eport.empty() ) {
+        std::string compat;
+        compat += _( "* This device has electronic port type: " + colorize( eport, c_light_green ) );
+        std::vector<std::string> &eport_banned = type->tool->e_ports_banned;
+        if( !eport_banned.empty() ) {
+            compat += _( "\n* This device does not support transfer to e-port types: " );
+            for( std::string &s : eport_banned ) {
+                compat += colorize( _( s ), c_yellow );
+            }
+        }
+        info.emplace_back( "DESCRIPTION", compat );
+    }
+
+    //TODO: REMOVE THIS
     // Display e-ink tablet copied recipes from SD cards
     const std::set<recipe_id> saved_recipes = get_saved_recipes();
     if( !saved_recipes.empty() ) {
@@ -4965,7 +4987,7 @@ void item::tool_info( std::vector<iteminfo> &info, const iteminfo_query *parts, 
     }
 
     // Display e-ink tablet ebook recipes
-    if( is_ebook_storage() && !is_broken_on_active() ) {
+    if( is_estorage() && !is_broken_on_active() ) {
         std::vector<std::string> known_recipe_list;
         std::vector<std::string> learnable_recipe_list;
         std::vector<std::string> unlearnable_recipe_list;
@@ -5613,11 +5635,11 @@ void item::melee_combat_info( std::vector<iteminfo> &info, const iteminfo_query 
           ( !dmg_types.empty() || type->m_to_hit > 0 ) ) || debug_mode ) {
         bodypart_id bp = bodypart_id( "torso" );
         damage_instance non_crit;
-        player_character.roll_all_damage( false, non_crit, true, *this, attack_vector_vector_null,
-                                          sub_body_part_sub_limb_debug, nullptr, bp );
+        player_character.roll_all_damage( false, non_crit, true, *this, attack_vector_id::NULL_ID(),
+                                          sub_bodypart_str_id::NULL_ID(), nullptr, bp );
         damage_instance crit;
-        player_character.roll_all_damage( true, crit, true, *this, attack_vector_vector_null,
-                                          sub_body_part_sub_limb_debug, nullptr, bp );
+        player_character.roll_all_damage( true, crit, true, *this, attack_vector_id::NULL_ID(),
+                                          sub_bodypart_str_id::NULL_ID(), nullptr, bp );
         int attack_cost = player_character.attack_speed( *this );
         insert_separation_line( info );
         if( parts->test( iteminfo_parts::DESCRIPTION_MELEEDMG ) ) {
@@ -6035,9 +6057,8 @@ void item::final_info( std::vector<iteminfo> &info, const iteminfo_query *parts,
                                        ? string_format( "<good>%s</good>", e->nname( 1 ) )
                                        : e->nname( 1 ) );
         }
-        info.emplace_back( "DESCRIPTION", _( "<bold>Can be stored in</bold>: " ) +
-                           enumerate_lcsorted_with_limit( holsters_str, 30 ) );
-        info.back().sName += ".";
+        info.emplace_back( "DESCRIPTION", string_format( _( "<bold>Can be stored in</bold>: %s." ),
+                           enumerate_lcsorted_with_limit( holsters_str, 30 ) ) );
     }
 
     if( parts->test( iteminfo_parts::DESCRIPTION_ACTIVATABLE_TRANSFORMATION ) ) {
@@ -6419,8 +6440,11 @@ nc_color item::color_in_inventory( const Character *const ch ) const
             static_cast<const learn_spell_actor *>( iuse->get_actor_ptr() );
         for( const std::string &spell_id_str : actor_ptr->spells ) {
             const spell_id sp_id( spell_id_str );
+            std::optional<int> max_book_level = sp_id->get_max_book_level();
             if( player_character.magic->knows_spell( sp_id ) &&
-                !player_character.magic->get_spell( sp_id ).is_max_level( player_character ) ) {
+                !player_character.magic->get_spell( sp_id ).is_max_level( player_character ) &&
+                !( max_book_level.has_value() &&
+                   player_character.magic->get_spell( sp_id ).get_level() >= max_book_level.value() ) ) {
                 ret = c_yellow;
             }
             if( !player_character.magic->knows_spell( sp_id ) &&
@@ -7105,11 +7129,10 @@ std::string item::display_name( unsigned int quantity ) const
                                    link_max_len - link_len, link_max_len, extensions ), cable_color ) );
         }
     }
-
     // HACK: This is a hack to prevent possible crashing when displaying maps as items during character creation
     if( is_map() && calendar::turn != calendar::turn_zero ) {
         tripoint_abs_omt map_pos_omt =
-            get_var( "reveal_map_center_omt", player_character.global_omt_location() );
+            get_var( "reveal_map_center_omt", player_character.pos_abs_omt() );
         tripoint_abs_sm map_pos =
             project_to<coords::sm>( map_pos_omt );
         const city *c = overmap_buffer.closest_city( map_pos ).city;
@@ -8797,22 +8820,159 @@ bool item::is_cash_card() const
     return typeId() == itype_cash_card;
 }
 
+bool item::is_estorage() const
+{
+    return contents.has_pocket_type( pocket_type::E_FILE_STORAGE );
+}
+
+bool item::is_estorage_usable( const Character &who ) const
+{
+    return is_estorage() && is_browsed() && efile_activity_actor::edevice_has_use( this ) &&
+           ammo_sufficient( &who );
+}
+
+bool item::is_estorable() const
+{
+    return has_flag( flag_E_STORABLE ) || is_book();
+}
+
+bool item::is_browsed() const
+{
+    return get_var( "browsed", "false" ) == "true";
+}
+
+void item::set_browsed( bool browsed )
+{
+    if( browsed ) {
+        set_var( "browsed", "true" );
+    } else {
+        set_var( "browsed", "false" );
+    }
+}
+
+bool item::is_ecopiable() const
+{
+    return has_flag( flag_E_COPIABLE ) || ( is_book() && !type->book->generic );
+}
+
+bool item::efiles_all_browsed() const
+{
+    if( is_browsed() ) {
+        return true;
+    }
+    std::vector<const item *> all_efiles = efiles();
+    if( !all_efiles.empty() ) {
+        for( const item *i : all_efiles ) {
+            if( !i->is_browsed() ) {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+units::ememory item::ememory_size() const
+{
+    units::ememory ememory_return = type->ememory_size;
+    if( typeId() == itype_efile_recipes ) {
+        ememory_return *= get_saved_recipes().size();
+    } else if( typeId() == itype_efile_photos ) {
+        ememory_return *= total_photos();
+    }
+    return ememory_return;
+}
+
+units::ememory item::occupied_ememory() const
+{
+    std::vector<const item *> all_efiles = efiles();
+    units::ememory total = 0_KB;
+    for( const item *i : all_efiles ) {
+        total += i->ememory_size();
+    }
+    return total;
+}
+
+units::ememory item::total_ememory() const
+{
+    std::vector<const item_pocket *> pockets = contents.get_pockets( []( item_pocket const & pocket ) {
+        return pocket.is_type( pocket_type::E_FILE_STORAGE );
+    } );
+    if( pockets.size() > 1 ) {
+        debugmsg( "no more than one E_FILE_STORAGE pocket is allowed" );
+    }
+    if( pockets.empty() ) {
+        return 0_KB;
+    }
+    return pockets.back()->get_pocket_data()->ememory_max;
+}
+
+units::ememory item::remaining_ememory() const
+{
+    return total_ememory() - occupied_ememory();
+}
+
+bool item::is_efile( const item_location &loc )
+{
+    return loc.parent_item() && loc.parent_item()->is_estorage();
+}
+
+item *item::get_recipe_catalog()
+{
+    const std::function<bool( const item &i )> filter = []( const item & i ) {
+        cata::value_ptr<memory_card_info> recipe_gen = i.typeId()->memory_card_data;
+        if( recipe_gen ) {
+            return true;
+        }
+        return false;
+    };
+    if( filter( *this ) ) {
+        return this;
+    }
+    return get_contents().get_item_with( filter );
+}
+
+const item *item::get_recipe_catalog() const
+{
+    const std::function<bool( const item &i )> filter = []( const item & i ) {
+        cata::value_ptr<memory_card_info> recipe_gen = i.typeId()->memory_card_data;
+        if( recipe_gen ) {
+            return true;
+        }
+        return false;
+    };
+    if( filter( *this ) ) {
+        return this;
+    }
+    return get_contents().get_item_with( filter );
+}
+
+item *item::get_photo_gallery()
+{
+    const std::function<bool( const item &i )> filter = []( const item & i ) {
+        return i.typeId() == itype_efile_photos;
+    };
+    return get_contents().get_item_with( filter );
+}
+
+const item *item::get_photo_gallery() const
+{
+    const std::function<bool( const item &i )> filter = []( const item & i ) {
+        return i.typeId() == itype_efile_photos;
+    };
+    return get_contents().get_item_with( filter );
+}
+
+int item::total_photos() const
+{
+    std::vector<item::extended_photo_def> extended_photos;
+    read_extended_photos( extended_photos, "CAMERA_EXTENDED_PHOTOS", true );
+    read_extended_photos( extended_photos, "CAMERA_MONSTER_PHOTOS", true );
+    return extended_photos.size();
+}
+
 bool item::is_software() const
 {
-    if( const std::optional<itype_id> &cont = type->default_container ) {
-        return item( *cont ).is_software_storage();
-    }
-    return false;
-}
-
-bool item::is_software_storage() const
-{
-    return contents.has_pocket_type( pocket_type::SOFTWARE );
-}
-
-bool item::is_ebook_storage() const
-{
-    return contents.has_pocket_type( pocket_type::EBOOK );
+    return type->category_force == item_category_software;
 }
 
 bool item::is_maybe_melee_weapon() const
@@ -10423,19 +10583,19 @@ ret_val<void> item::can_contain_directly( const item &it ) const
 }
 
 ret_val<void> item::can_contain( const item &it, const bool nested, const bool ignore_rigidity,
-                                 const bool ignore_pkt_settings, const bool is_pick_up_inv,
+                                 const bool ignore_pkt_settings, const bool ignore_non_container_pocket,
                                  const item_location &parent_it,
                                  units::volume remaining_parent_volume, const bool allow_nested ) const
 {
     int copies = 1;
     return can_contain( it, copies, nested, ignore_rigidity,
-                        ignore_pkt_settings, is_pick_up_inv, parent_it,
+                        ignore_pkt_settings, ignore_non_container_pocket, parent_it,
                         remaining_parent_volume, allow_nested );
 }
 
 ret_val<void> item::can_contain( const item &it, int &copies_remaining, const bool nested,
                                  const bool ignore_rigidity, const bool ignore_pkt_settings,
-                                 const bool is_pick_up_inv, const item_location &parent_it,
+                                 const bool ignore_non_container_pocket, const item_location &parent_it,
                                  units::volume remaining_parent_volume,
                                  const bool allow_nested ) const
 {
@@ -10481,7 +10641,7 @@ ret_val<void> item::can_contain( const item &it, int &copies_remaining, const bo
                     continue;
                 }
                 auto ret = internal_it->can_contain( it, copies_remaining, true, ignore_nested_rigidity,
-                                                     ignore_pkt_settings, is_pick_up_inv, parent_it,
+                                                     ignore_pkt_settings, ignore_non_container_pocket, parent_it,
                                                      pkt->remaining_volume() );
                 if( copies_remaining <= 0 ) {
                     return ret;
@@ -10490,10 +10650,11 @@ ret_val<void> item::can_contain( const item &it, int &copies_remaining, const bo
         }
     }
 
-    return nested && !ignore_rigidity ?
-           contents.can_contain_rigid( it, copies_remaining, ignore_pkt_settings, is_pick_up_inv ) :
-           contents.can_contain( it, copies_remaining, ignore_pkt_settings, is_pick_up_inv,
-                                 remaining_parent_volume );
+    return nested && !ignore_rigidity
+           ? contents.can_contain_rigid( it, copies_remaining, ignore_pkt_settings,
+                                         ignore_non_container_pocket )
+           : contents.can_contain( it, copies_remaining, ignore_pkt_settings, ignore_non_container_pocket,
+                                   remaining_parent_volume );
 }
 
 ret_val<void> item::can_contain( const itype &tp ) const
@@ -10553,6 +10714,15 @@ bool item::spill_contents( const tripoint_bub_ms &pos )
     return contents.spill_contents( pos );
 }
 
+bool item::spill_contents( map *here, const tripoint_bub_ms &pos )
+{
+    if( ( !is_container() && !is_magazine() && !uses_magazine() ) ||
+        is_container_empty() ) {
+        return true;
+    }
+    return contents.spill_contents( here, pos );
+}
+
 bool item::spill_open_pockets( Character &guy, const item *avoid )
 {
     return contents.spill_open_pockets( guy, avoid );
@@ -10567,7 +10737,7 @@ book_proficiency_bonuses item::get_book_proficiency_bonuses() const
 {
     book_proficiency_bonuses ret;
 
-    if( is_ebook_storage() ) {
+    if( is_estorage() ) {
         for( const item *book : ebooks() ) {
             ret += book->get_book_proficiency_bonuses();
         }
@@ -10582,6 +10752,15 @@ book_proficiency_bonuses item::get_book_proficiency_bonuses() const
     return ret;
 }
 
+int item::pages_in_book( const itype &type )
+{
+    if( !type.book ) {
+        return 0;
+    }
+    // an A4 sheet weights roughly 5 grams
+    return std::max( 1, static_cast<int>( units::to_gram( type.weight ) / 5 ) );
+}
+
 int item::get_chapters() const
 {
     if( !type->book ) {
@@ -10592,28 +10771,46 @@ int item::get_chapters() const
 
 int item::get_remaining_chapters( const Character &u ) const
 {
-    // NOLINTNEXTLINE(cata-translate-string-literal)
-    const std::string var = string_format( "remaining-chapters-%d", u.getID().get_value() );
-    return get_var( var, get_chapters() );
+    const itype_id &type = typeId();
+    if( is_book() && type->book->generic ) {
+        // NOLINTNEXTLINE(cata-translate-string-literal)
+        const std::string var = string_format( "remaining-chapters-%d", u.getID().get_value() );
+        return get_var( var, get_chapters() );
+    }
+    const std::map<itype_id, int> &book_chapters = u.book_chapters;
+    auto find_chapters = book_chapters.find( type );
+    if( find_chapters == book_chapters.end() ) {
+        return get_chapters();
+    }
+    return find_chapters->second;
 }
 
-void item::mark_chapter_as_read( const Character &u )
+void item::mark_chapter_as_read( Character &u )
 {
-    // NOLINTNEXTLINE(cata-translate-string-literal)
-    const std::string var = string_format( "remaining-chapters-%d", u.getID().get_value() );
-    if( type->book && type->book->chapters == 0 ) {
-        // books without chapters will always have remaining chapters == 0, so we don't need to store them
-        erase_var( var );
+    // books without chapters will always have remaining chapters == 0, so we don't need to store them
+    if( is_book() && get_chapters() == 0 ) {
         return;
     }
-    const int remain = std::max( 0, get_remaining_chapters( u ) - 1 );
-    set_var( var, remain );
+    if( is_book() && type->book->generic ) {
+        // NOLINTNEXTLINE(cata-translate-string-literal)
+        const std::string var = string_format( "remaining-chapters-%d", u.getID().get_value() );
+        const int remain = std::max( 0, get_remaining_chapters( u ) - 1 );
+        set_var( var, remain );
+        return;
+    }
+    u.book_chapters[typeId()] = std::max( 0, get_remaining_chapters( u ) - 1 );
 }
 
 std::set<recipe_id> item::get_saved_recipes() const
 {
     if( is_broken_on_active() ) {
         return {};
+    }
+    if( is_estorage() && efile_activity_actor::edevice_has_use( this ) ) {
+        const item *recipe_catalog = get_recipe_catalog();
+        if( recipe_catalog != nullptr ) {
+            return recipe_catalog->get_saved_recipes();
+        }
     }
     std::set<recipe_id> result;
     for( const std::string &rid_str : string_split( get_var( "EIPC_RECIPES" ), ',' ) ) {
@@ -10636,6 +10833,29 @@ void item::set_saved_recipes( const std::set<recipe_id> &recipes )
     set_var( "EIPC_RECIPES", string_join( recipes, "," ) );
 }
 
+void item::generate_recipes()
+{
+    const memory_card_info *mmd = type->memory_card_data ? &*type->memory_card_data : nullptr;
+    std::set<recipe_id> saved_recipes = get_saved_recipes();
+    if( mmd != nullptr ) {
+        std::set<recipe_id> candidates;
+        for( const auto& [rid, r] : recipe_dict ) {
+            if( r.never_learn || r.obsolete || mmd->recipes_categories.count( r.category ) == 0 ||
+                saved_recipes.count( rid ) ||
+                r.difficulty > mmd->recipes_level_max || r.difficulty < mmd->recipes_level_min ||
+                ( r.has_flag( "SECRET" ) && !mmd->secret_recipes ) ) {
+                continue;
+            }
+            candidates.emplace( rid );
+        }
+        const int recipe_num = rng( 1, mmd->recipes_amount );
+        for( int i = 0; i < recipe_num && !candidates.empty(); i++ ) {
+            const recipe_id rid = random_entry_removed( candidates );
+            saved_recipes.emplace( rid );
+        }
+        set_saved_recipes( saved_recipes );
+    }
+}
 std::vector<std::pair<const recipe *, int>> item::get_available_recipes(
             const Character &u ) const
 {
@@ -11687,6 +11907,16 @@ std::vector<const item *> item::softwares() const
 std::vector<const item *> item::ebooks() const
 {
     return contents.ebooks();
+}
+
+std::vector< item *> item::efiles()
+{
+    return contents.efiles();
+}
+
+std::vector<const item *> item::efiles() const
+{
+    return contents.efiles();
 }
 
 std::vector<const item *> item::cables() const
@@ -13011,7 +13241,7 @@ void item::mark_as_used_by_player( const Character &p )
     used_by_ids += string_format( "%d;", p.getID().get_value() );
 }
 
-bool item::can_holster( const item &obj, bool ) const
+bool item::can_holster( const item &obj ) const
 {
     if( !type->can_use( "holster" ) ) {
         return false; // item is not a holster
@@ -13181,7 +13411,7 @@ bool item::process_temperature_rot( float insulation, const tripoint_bub_ms &pos
             // Use weather if above ground, use map temp if below
             units::temperature env_temperature;
             if( pos.z() >= 0 && flag != temperature_flag::ROOT_CELLAR ) {
-                env_temperature = wgen.get_weather_temperature( get_map().getglobal( pos ), time, seed );
+                env_temperature = wgen.get_weather_temperature( get_map().get_abs( pos ), time, seed );
             } else {
                 env_temperature = AVERAGE_ANNUAL_TEMPERATURE;
             }
@@ -13493,7 +13723,7 @@ void item::overwrite_relic( const relic &nrelic )
 
 bool item::use_relic( Character &guy, const tripoint_bub_ms &pos )
 {
-    return relic_data->activate( guy, pos.raw() );
+    return relic_data->activate( guy, pos );
 }
 
 void item::process_relic( Character *carrier, const tripoint_bub_ms &pos )
@@ -13880,7 +14110,7 @@ ret_val<void> item::link_to( vehicle &veh, const point_rel_ms &mount, link_state
         link().source = bio_link ? link_state::bio_cable : link_state::no_link;
         link().target = link_type;
         link().t_veh = veh.get_safe_reference();
-        link().t_abs_pos = get_map().getglobal( link().t_veh->pos_bub() );
+        link().t_abs_pos = get_map().get_abs( link().t_veh->pos_bub() );
         link().t_mount = mount;
         link().s_bub_pos = tripoint_bub_ms::min; // Forces the item to check the length during process_link.
 
@@ -13910,8 +14140,8 @@ ret_val<void> item::link_to( vehicle &veh, const point_rel_ms &mount, link_state
 
     // Prepare target tripoints for the cable parts that'll be added to the selected/previous vehicles
     const std::pair<tripoint_abs_ms, tripoint_abs_ms> prev_part_target = std::make_pair(
-                veh.global_square_location() + veh.coord_translate( mount ),
-                veh.global_square_location() );
+                veh.pos_abs() + veh.coord_translate( mount ),
+                veh.pos_abs() );
     const std::pair<tripoint_abs_ms, tripoint_abs_ms> sel_part_target = std::make_pair(
                 link().t_abs_pos + prev_veh->coord_translate( link().t_mount ),
                 link().t_abs_pos );
@@ -14133,7 +14363,7 @@ bool item::process_link( map &here, Character *carrier, const tripoint_bub_ms &p
         if( !length_check_needed ) {
             return false;
         }
-        link().length = rl_dist( here.getglobal( pos ), link().t_abs_pos ) +
+        link().length = rl_dist( here.get_abs( pos ), link().t_abs_pos ) +
                         link().t_mount.abs().x() + link().t_mount.abs().y();
         if( check_length() ) {
             return reset_link( true, carrier );
@@ -14186,7 +14416,7 @@ bool item::process_link( map &here, Character *carrier, const tripoint_bub_ms &p
 
     // Set the new absolute position to the vehicle's origin.
     tripoint_bub_ms t_veh_bub_pos = t_veh->pos_bub();
-    tripoint_abs_ms new_t_abs_pos = here.getglobal( t_veh_bub_pos );
+    tripoint_abs_ms new_t_abs_pos = here.get_abs( t_veh_bub_pos );
     if( link().t_abs_pos != new_t_abs_pos ) {
         link().t_abs_pos = new_t_abs_pos;
         length_check_needed = true;
@@ -14651,7 +14881,7 @@ bool item::process_internal( map &here, Character *carrier, const tripoint_bub_m
                 here.rotten_item_spawn( *this, pos );
             }
             if( is_corpse() ) {
-                here.handle_decayed_corpse( *this, here.getglobal( pos ) );
+                here.handle_decayed_corpse( *this, here.get_abs( pos ) );
             }
             return true;
         }
@@ -15495,8 +15725,7 @@ item const *item::this_or_single_content() const
 bool item::contents_only_one_type() const
 {
     std::list<const item *> const items = contents.all_items_top( []( item_pocket const & pkt ) {
-        return pkt.is_type( pocket_type::CONTAINER ) ||
-               pkt.is_type( pocket_type::SOFTWARE );
+        return pkt.is_type( pocket_type::CONTAINER );
     } );
     return items.size() == 1 ||
            ( items.size() > 1 &&
@@ -15542,10 +15771,14 @@ item::aggregate_t item::aggregated_contents( int depth, int maxdepth ) const
     aggregate_t *running_max{};
     aggregate_t *max_type{};
     auto const cont_and_soft = []( item_pocket const & pkt ) {
-        return pkt.is_type( pocket_type::CONTAINER ) || pkt.is_type( pocket_type::SOFTWARE );
+        return pkt.is_type( pocket_type::CONTAINER ) || pkt.is_type( pocket_type::E_FILE_STORAGE );
     };
 
+
     for( item_pocket const *pk : contents.get_pockets( cont_and_soft ) ) {
+        if( pk->is_type( pocket_type::E_FILE_STORAGE ) && ( is_broken() || !is_browsed() ) ) {
+            continue;
+        }
         for( item const *pkit : pk->all_items_top() ) {
             total++;
             item_category_id const cat = pkit->get_category_of_contents( depth, maxdepth ).get_id();
@@ -15582,6 +15815,17 @@ std::list<const item *> item::all_items_ptr() const
     for( int i = static_cast<int>( pocket_type::CONTAINER );
          i < static_cast<int>( pocket_type::LAST ); i++ ) {
         std::list<const item *> inserted{ all_items_top_recursive( static_cast<pocket_type>( i ) ) };
+        all_items_internal.insert( all_items_internal.end(), inserted.begin(), inserted.end() );
+    }
+    return all_items_internal;
+}
+
+std::list<item *> item::all_items_ptr()
+{
+    std::list<item *> all_items_internal;
+    for( int i = static_cast<int>( pocket_type::CONTAINER );
+         i < static_cast<int>( pocket_type::LAST ); i++ ) {
+        std::list<item *> inserted{ all_items_top_recursive( static_cast<pocket_type>( i ) ) };
         all_items_internal.insert( all_items_internal.end(), inserted.begin(), inserted.end() );
     }
     return all_items_internal;

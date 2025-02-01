@@ -176,12 +176,11 @@ player_activity veh_interact::serialize_activity()
     // otherwise (e.g. installing a new frame), just use part 0
     const point_rel_ms q = veh->coord_translate( pt ? pt->mount : veh->part( 0 ).mount );
     const vehicle_part *vpt = pt ? pt : &veh->part( 0 );
-    map &here = get_map();
-    for( const tripoint_bub_ms &p : veh->get_points( true ) ) {
-        res.coord_set.insert( here.getglobal( p ) );
+    for( const tripoint_abs_ms &p : veh->get_points( true ) ) {
+        res.coord_set.insert( p );
     }
-    res.values.push_back( here.getglobal( veh->pos_bub() ).x() + q.x() );   // values[0]
-    res.values.push_back( here.getglobal( veh->pos_bub() ).y() + q.y() );   // values[1]
+    res.values.push_back( veh->pos_abs().x() + q.x() );   // values[0]
+    res.values.push_back( veh->pos_abs().y() + q.y() );   // values[1]
     res.values.push_back( dd.x() );   // values[2]
     res.values.push_back( dd.y() );   // values[3]
     res.values.push_back( -dd.x() );   // values[4]
@@ -512,8 +511,8 @@ void veh_interact::do_main_loop()
         const int description_scroll_lines = catacurses::getmaxy( w_parts ) - 4;
         const std::string action = main_context.handle_input();
         msg.reset();
-        if( const std::optional<tripoint> vec = main_context.get_direction( action ) ) {
-            move_cursor( point_rel_ms( vec->xy() ) );
+        if( const std::optional<tripoint_rel_ms> vec = main_context.get_direction_rel_ms( action ) ) {
+            move_cursor( vec->xy() );
         } else if( action == "QUIT" ) {
             finish = true;
         } else if( action == "INSTALL" ) {
@@ -3054,7 +3053,7 @@ void veh_interact::complete_vehicle( Character &you )
         // during this player/NPCs activity.
         // check the vehicle points that were stored at beginning of activity.
         for( const tripoint_abs_ms &pt : you.activity.coord_set ) {
-            ovp = here.veh_at( here.bub_from_abs( pt ) );
+            ovp = here.veh_at( here.get_bub( pt ) );
             if( ovp ) {
                 break;
             }

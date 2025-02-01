@@ -23,7 +23,7 @@ static const spell_id spell_test_spell_tp_mummy( "test_spell_tp_mummy" );
 //
 // Each test case relates to some spell feature, in terms of:
 //
-// - JSON spell content, from data/json/*.json, as documented in doc/MAGIC.md
+// - JSON spell content, from data/json/*.json, as documented in doc/JSON/MAGIC.md
 // - C++ spell functions, defined in src/magic.cpp and src/magic_spell_effect.cpp
 //
 // To run all tests in this file:
@@ -583,6 +583,8 @@ TEST_CASE( "spell_effect_-_target_attack", "[magic][spell][effect][target_attack
 // spell_effect::spawn_summoned_monster
 TEST_CASE( "spell_effect_-_summon", "[magic][spell][effect][summon]" )
 {
+    map &here = get_map();
+
     clear_map();
 
     // Avatar/spellcaster and summoned mummy locations
@@ -607,7 +609,7 @@ TEST_CASE( "spell_effect_-_summon", "[magic][spell][effect][summon]" )
     CHECK( g->num_creatures() == 2 );
 
     //kill the ghost
-    creatures.creature_at( mummy_loc )->die( nullptr );
+    creatures.creature_at( mummy_loc )->die( &here, nullptr );
     g->cleanup_dead();
 
     //a corpse was not created
@@ -625,7 +627,7 @@ TEST_CASE( "spell_effect_-_summon", "[magic][spell][effect][summon]" )
     CHECK( g->num_creatures() == 2 );
 
     //kill the mummy
-    creatures.creature_at( mummy_loc )->die( nullptr );
+    creatures.creature_at( mummy_loc )->die( &here, nullptr );
     g->cleanup_dead();
 
     //a corpse was created

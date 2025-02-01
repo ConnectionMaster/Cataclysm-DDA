@@ -62,8 +62,8 @@ TEST_CASE( "map_coordinate_conversion_functions" )
     CAPTURE( test_abs );
 
     // Verify round-tripping
-    CHECK( here.getglobal( here.bub_from_abs( test_abs ) ) == test_abs );
-    CHECK( here.bub_from_abs( here.getglobal( test_point ) ) == test_point );
+    CHECK( here.get_abs( here.get_bub( test_abs ) ) == test_abs );
+    CHECK( here.get_bub( here.get_abs( test_point ) ) == test_point );
 }
 
 TEST_CASE( "destroy_grabbed_furniture" )
@@ -182,7 +182,7 @@ TEST_CASE( "inactive_container_with_active_contents", "[active_item][map]" )
     REQUIRE( here.get_submaps_with_active_items().empty() );
     here.check_submap_active_item_consistency();
     tripoint_bub_ms const test_loc;
-    tripoint_abs_sm const test_loc_sm = project_to<coords::sm>( here.getglobal( test_loc ) );
+    tripoint_abs_sm const test_loc_sm = project_to<coords::sm>( here.get_abs( test_loc ) );
 
     item bottle_plastic( itype_bottle_plastic );
     REQUIRE( !bottle_plastic.needs_processing() );
@@ -222,7 +222,7 @@ TEST_CASE( "milk_rotting", "[active_item][map]" )
     here.check_submap_active_item_consistency();
     REQUIRE( here.get_submaps_with_active_items().empty() );
     tripoint_bub_ms const test_loc;
-    tripoint_abs_sm const test_loc_sm = project_to<coords::sm>( here.getglobal( test_loc ) );
+    tripoint_abs_sm const test_loc_sm = project_to<coords::sm>( here.get_abs( test_loc ) );
 
     restore_on_out_of_scope restore_temp(
         get_weather().forced_temperature );
@@ -295,7 +295,7 @@ TEST_CASE( "active_monster_drops", "[active_item][map]" )
     zombo.no_extra_death_drops = true;
     zombo.inv.emplace_back( bag_plastic );
     calendar::turn += time_duration::from_seconds( cookie.processing_speed() + 1 );
-    zombo.die( nullptr );
+    zombo.die( &here, nullptr );
     REQUIRE( here.i_at( start_loc ).size() == 1 );
     item &dropped_bag = here.i_at( start_loc ).begin()->only_item();
 

@@ -66,13 +66,13 @@ TEST_CASE( "power_loss_to_cables", "[vehicle][power]" )
             debugmsg( "source same as target" );
         }
 
-        tripoint_abs_ms target_global = here.getglobal( target );
+        tripoint_abs_ms target_global = here.get_abs( target );
         const vpart_id vpid( cord.typeId().str() );
 
         point_rel_ms vcoords = source_vp->mount_pos();
         vehicle_part source_part( vpid, item( cord ) );
         source_part.target.first = target_global;
-        source_part.target.second = target_veh->global_square_location();
+        source_part.target.second = target_veh->pos_abs();
         source_veh->install_part( vcoords, std::move( source_part ) );
 
         vcoords = target_vp->mount_pos();
@@ -80,8 +80,8 @@ TEST_CASE( "power_loss_to_cables", "[vehicle][power]" )
         tripoint_bub_ms source_global( cord.get_var( "source_x", 0 ),
                                        cord.get_var( "source_y", 0 ),
                                        cord.get_var( "source_z", 0 ) );
-        target_part.target.first = here.getglobal( source_global );
-        target_part.target.second = source_veh->global_square_location();
+        target_part.target.first = here.get_abs( source_global );
+        target_part.target.second = source_veh->pos_abs();
         target_veh->install_part( vcoords, std::move( target_part ) );
     };
 

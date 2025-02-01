@@ -510,7 +510,7 @@ void inventory::form_from_zone( map &m, std::unordered_set<tripoint_abs_ms> &zon
     std::vector<tripoint_bub_ms> pts;
     pts.reserve( zone_pts.size() );
     for( const tripoint_abs_ms &elem : zone_pts ) {
-        pts.push_back( m.bub_from_abs( elem ) );
+        pts.push_back( m.get_bub( elem ) );
     }
     form_from_map( m, pts, pl, assign_invlet );
 }
@@ -1111,6 +1111,12 @@ const itype_bin &inventory::get_binned_items() const
         binned_items[ e->typeId() ].push_back( e );
         for( const item *it : e->softwares() ) {
             binned_items[it->typeId()].push_back( it );
+        }
+        // list stored ebooks
+        if( e->is_estorage() && !e->is_broken_on_active() ) {
+            for( const item *book : e->get_contents().ebooks() ) {
+                binned_items[ book->typeId() ].push_back( book );
+            }
         }
         return VisitResponse::NEXT;
     } );
