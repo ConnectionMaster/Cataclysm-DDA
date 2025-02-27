@@ -10,6 +10,7 @@
 #include "options.h"
 #include "rng.h"
 #include "system_locale.h"
+#include "translations.h"
 
 #if defined(_WIN32)
 #include <windows.h>
@@ -263,9 +264,9 @@ cata_path PATH_INFO::datadir_path()
 {
     return datadir_path_value;
 }
-std::string PATH_INFO::debug()
+cata_path PATH_INFO::debug()
 {
-    return config_dir_value + "debug.log";
+    return config_dir_path_value / "debug.log";
 }
 cata_path PATH_INFO::defaultsounddir()
 {

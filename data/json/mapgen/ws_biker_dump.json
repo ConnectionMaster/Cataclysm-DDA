@@ -3,7 +3,6 @@
     "type": "mapgen",
     "om_terrain": [ [ "ws_biker_dump_0_0", "ws_biker_dump_1_0", "ws_biker_dump_2_0", "ws_biker_dump_3_0" ] ],
     "method": "json",
-    "weight": 1000,
     "object": {
       "fill_ter": "t_region_soil",
       "rows": [
@@ -91,7 +90,6 @@
     "type": "mapgen",
     "om_terrain": [ [ "ws_biker_dump_0_1", "ws_biker_dump_1_1", "ws_biker_dump_2_1", "ws_biker_dump_3_1" ] ],
     "method": "json",
-    "weight": 1000,
     "object": {
       "fill_ter": "t_region_soil",
       "rows": [
@@ -123,7 +121,7 @@
       "palettes": [ "regional_dump" ],
       "furniture": { "H": "f_55gal_firebarrel" },
       "items": {
-        "B": { "item": "oa_custom_trash", "chance": 15 },
+        "B": { "item": "SUS_trash_trashcan", "chance": 15 },
         "1": { "item": "oa_ig_rd_electronic_trash", "chance": 10 },
         "2": { "item": "trash", "chance": 10 },
         "3": { "item": "oa_ig_rd_metal_trash", "chance": 10 },
@@ -157,7 +155,6 @@
     "type": "mapgen",
     "om_terrain": [ [ "ws_biker_dump_0_2", "ws_biker_dump_1_2", "ws_biker_dump_2_2", "ws_biker_dump_3_2" ] ],
     "method": "json",
-    "weight": 1000,
     "object": {
       "fill_ter": "t_region_soil",
       "rows": [
@@ -291,7 +288,6 @@
     "type": "mapgen",
     "om_terrain": [ [ "ws_biker_dump_0_3", "ws_biker_dump_1_3", "ws_biker_dump_2_3", "ws_biker_dump_3_3" ] ],
     "method": "json",
-    "weight": 1000,
     "object": {
       "fill_ter": "t_region_soil",
       "rows": [

@@ -45,6 +45,7 @@
 #include "type_id.h"
 #include "units.h"
 #include "value_ptr.h"
+#include "vpart_position.h"
 
 #if defined(TILES)
 #include "cata_tiles.h"
@@ -66,7 +67,6 @@ class field_entry;
 class item_location;
 class mapgendata;
 class monster;
-class optional_vpart_position;
 class relic_procgen_data;
 class submap;
 class vehicle;
@@ -104,8 +104,6 @@ struct field_proc_data;
 
 class PathfindingFlags;
 
-using relic_procgen_id = string_id<relic_procgen_data>;
-
 class map_stack : public item_stack
 {
     private:
@@ -114,7 +112,8 @@ class map_stack : public item_stack
     public:
         map_stack( cata::colony<item> *newstack, tripoint_bub_ms newloc, map *neworigin ) :
             item_stack( newstack ), location( newloc ), myorigin( neworigin ) {}
-        void insert( const item &newitem ) override;
+        void insert( map &, const item &newitem ) override;
+        void insert( const item &newitem );
         iterator erase( const_iterator it ) override;
         int count_limit() const override {
             return MAX_ITEM_IN_SQUARE;
@@ -592,7 +591,7 @@ class map
 
         bool is_open_air( const tripoint_bub_ms &p ) const;
 
-        bool try_fall( const tripoint_bub_ms &p, Creature *c ) const;
+        bool try_fall( const tripoint_bub_ms &p, Creature *c );
 
         /**
         * Similar behavior to `move_cost()`, but ignores vehicles.
@@ -805,7 +804,7 @@ class map
         // Returns the wheel area of the vehicle multiplied by traction of the surface
         // When ignore_movement_modifiers is set to true, it returns the area of the wheels touching the ground
         // TODO: Remove the ugly sinking vehicle hack
-        float vehicle_wheel_traction( const vehicle &veh, bool ignore_movement_modifiers = false ) const;
+        float vehicle_wheel_traction( const vehicle &veh, bool ignore_movement_modifiers = false );
 
         // Executes vehicle-vehicle collision based on vehicle::collision results
         // Returns impulse of the executed collision
@@ -1128,7 +1127,7 @@ class map
         /** Keeps bashing a square until there is no more vehicle part */
         void destroy_vehicle( const tripoint_bub_ms &, bool silent = false );
         void crush( const tripoint_bub_ms &p );
-        void shoot( const tripoint_bub_ms &p, projectile &proj, bool hit_items );
+        double shoot( const tripoint_bub_ms &p, projectile &proj, bool hit_items );
         /** Checks if a square should collapse, returns the X for the one_in(X) collapse chance */
         int collapse_check( const tripoint_bub_ms &p ) const;
         /** Causes a collapse at p, such as from destroying a wall */
@@ -1148,7 +1147,8 @@ class map
          */
         bash_params bash( const tripoint_bub_ms &p, int str, bool silent = false,
                           bool destroy = false, bool bash_floor = false,
-                          const vehicle *bashing_vehicle = nullptr );
+                          const vehicle *bashing_vehicle = nullptr,
+                          bool repair_missing_ground = true );
 
         // Effects of attacks/items
         bool hit_with_acid( const tripoint_bub_ms &p );
@@ -1242,25 +1242,6 @@ class map
                         variant, faction );
         }
 
-        // FIXME: remove these overloads and require spawn_item to take an
-        // itype_id
-        void spawn_item( const tripoint_bub_ms &p, const std::string &type_id,
-                         unsigned quantity = 1, int charges = 0,
-                         const time_point &birthday = calendar::start_of_cataclysm, int damlevel = 0,
-                         const std::set<flag_id> &flags = {}, const std::string &variant = "",
-                         const std::string &faction = "" ) {
-            spawn_item( p, itype_id( type_id ), quantity, charges, birthday, damlevel, flags, variant,
-                        faction );
-        }
-        void spawn_item( const point_bub_ms &p, const std::string &type_id,
-                         unsigned quantity = 1, int charges = 0,
-                         const time_point &birthday = calendar::start_of_cataclysm, int damlevel = 0,
-                         const std::set<flag_id> &flags = {}, const std::string &variant = "",
-                         const std::string &faction = "" ) {
-            spawn_item( tripoint_bub_ms( p, abs_sub.z() ), type_id, quantity, charges, birthday, damlevel,
-                        flags,
-                        variant, faction );
-        }
         units::volume max_volume( const tripoint_bub_ms &p );
         units::volume free_volume( const tripoint_bub_ms &p );
         units::volume stored_volume( const tripoint_bub_ms &p );
@@ -1651,7 +1632,7 @@ class map
         void drop_items( const tripoint_bub_ms &p );
         void drop_vehicle( const tripoint_bub_ms &p );
         void drop_fields( const tripoint_bub_ms &p );
-        void drop_creature( const tripoint_bub_ms &p ) const;
+        void drop_creature( const tripoint_bub_ms &p );
         /*@}*/
     public:
         /**
@@ -1678,7 +1659,7 @@ class map
         // 6 liters at 250 ml per charge
         void place_toilet( const tripoint_bub_ms &p, int charges = 6 * 4 );
         void place_vending( const tripoint_bub_ms &p, const item_group_id &type, bool reinforced = false,
-                            bool lootable = false, bool powered = false );
+                            bool lootable = false, bool powered = false, bool networked = false );
         // places an NPC, if static NPCs are enabled or if force is true
         character_id place_npc( const point_bub_ms &p, const string_id<npc_template> &type );
         void apply_faction_ownership( const point_bub_ms &p1, const point_bub_ms &p2,
@@ -1750,13 +1731,13 @@ class map
          * Coordinates is in the system that is used by the ter/furn/i_at functions.
          * Output is in the same scale, but in global system.
          */
-        tripoint_abs_ms getglobal( const tripoint_bub_ms &p ) const;
+        tripoint_abs_ms get_abs( const tripoint_bub_ms &p ) const;
         /**
-         * Inverse of @ref getglobal
+         * Inverse of @ref get_abs
          */
-        tripoint_bub_ms bub_from_abs( const tripoint_abs_ms &p ) const;
-        point_bub_ms bub_from_abs( const point_abs_ms &p ) const {
-            return bub_from_abs( tripoint_abs_ms( p, abs_sub.z() ) ).xy();
+        tripoint_bub_ms get_bub( const tripoint_abs_ms &p ) const;
+        point_bub_ms get_bub( const point_abs_ms &p ) const {
+            return get_bub( tripoint_abs_ms( p, abs_sub.z() ) ).xy();
         }
         bool inbounds( const tripoint_bub_ms &p ) const;
         bool inbounds( const tripoint_abs_ms &p ) const;
@@ -2064,7 +2045,8 @@ class map
 
         // Internal methods used to bash just the selected features
         // Information on what to bash/what was bashed is read from/written to the bash_params struct
-        void bash_ter_furn( const tripoint_bub_ms &p, bash_params &params );
+        void bash_ter_furn( const tripoint_bub_ms &p, bash_params &params,
+                            bool repair_missing_ground = true );
         void bash_items( const tripoint_bub_ms &p, bash_params &params );
         void bash_vehicle( const tripoint_bub_ms &p, bash_params &params );
         void bash_field( const tripoint_bub_ms &p, bash_params &params );
@@ -2383,14 +2365,6 @@ class tinymap : private map
             map::spawn_item( rebase_bub( p ), type_id, quantity, charges, birthday, damlevel, flags, variant,
                              faction );
         }
-        void spawn_item( const tripoint_omt_ms &p, const std::string &type_id, // TODO: Make it typed
-                         unsigned quantity = 1, int charges = 0,
-                         const time_point &birthday = calendar::start_of_cataclysm, int damlevel = 0,
-                         const std::set<flag_id> &flags = {}, const std::string &variant = "",
-                         const std::string &faction = "" ) {
-            map::spawn_item( rebase_bub( p ), type_id, quantity, charges, birthday, damlevel, flags, variant,
-                             faction );
-        }
         std::vector<item *> spawn_items( const tripoint_omt_ms &p, const std::vector<item> &new_items ) {
             return map::spawn_items( rebase_bub( p ), new_items );
         }
@@ -2423,20 +2397,20 @@ class tinymap : private map
             map::i_rem( rebase_bub( p ), it );
         }
         void i_clear( const tripoint_omt_ms &p ) {
-            return map::i_clear( rebase_bub( p ) );
+            map::i_clear( rebase_bub( p ) );
         }
         bool add_field( const tripoint_omt_ms &p, const field_type_id &type_id, int intensity = INT_MAX,
                         const time_duration &age = 0_turns, bool hit_player = true ) {
             return map::add_field( rebase_bub( p ), type_id, intensity, age, hit_player );
         }
         void delete_field( const tripoint_omt_ms &p, const field_type_id &field_to_remove ) {
-            return map::delete_field( rebase_bub( p ), field_to_remove );
+            map::delete_field( rebase_bub( p ), field_to_remove );
         }
         bool has_flag( ter_furn_flag flag, const tripoint_omt_ms &p ) const {
             return map::has_flag( flag, rebase_bub( p ) );
         }
         void destroy( const tripoint_omt_ms &p, bool silent = false ) {
-            return map::destroy( rebase_bub( p ), silent );
+            map::destroy( rebase_bub( p ), silent );
         }
         const trap &tr_at( const tripoint_omt_ms &p ) const {
             return map::tr_at( rebase_bub( p ) );
@@ -2464,7 +2438,7 @@ class tinymap : private map
         }
         void add_splatter_trail( const field_type_id &type, const tripoint_omt_ms &from,
                                  const tripoint_omt_ms &to ) {
-            return map::add_splatter_trail( type, rebase_bub( from ), rebase_bub( to ) );
+            map::add_splatter_trail( type, rebase_bub( from ), rebase_bub( to ) );
         }
         void collapse_at( const tripoint_omt_ms &p, bool silent,
                           bool was_supporting = false,
@@ -2474,11 +2448,11 @@ class tinymap : private map
         tripoint_abs_sm get_abs_sub() const {
             return map::get_abs_sub();
         }
-        tripoint_abs_ms getglobal( const tripoint_omt_ms &p ) const {
-            return map::getglobal( rebase_bub( p ) );
+        tripoint_abs_ms get_abs( const tripoint_omt_ms &p ) const {
+            return map::get_abs( rebase_bub( p ) );
         }
-        tripoint_omt_ms omt_from_abs( const tripoint_abs_ms &p ) const {
-            return rebase_omt( map::bub_from_abs( p ) );
+        tripoint_omt_ms get_omt( const tripoint_abs_ms &p ) const {
+            return rebase_omt( map::get_bub( p ) );
         };
         bool is_outside( const tripoint_omt_ms &p ) const {
             return map::is_outside( rebase_bub( p ) );

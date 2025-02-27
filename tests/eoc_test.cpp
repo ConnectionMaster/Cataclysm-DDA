@@ -1,17 +1,55 @@
+#include <cstddef>
+#include <functional>
+#include <list>
+#include <memory>
+#include <optional>
+#include <string>
+#include <utility>
+#include <vector>
+
 #include "avatar.h"
 #include "calendar.h"
 #include "cata_catch.h"
+#include "character.h"
+#include "character_attire.h"
+#include "character_id.h"
 #include "character_martial_arts.h"
+#include "computer.h"
 #include "coordinates.h"
+#include "creature.h"
+#include "damage.h"
+#include "debug.h"
+#include "dialogue.h"
+#include "dialogue_helpers.h"
 #include "effect_on_condition.h"
+#include "field_type.h"
 #include "game.h"
+#include "global_vars.h"
+#include "item.h"
+#include "item_location.h"
+#include "line.h"
+#include "magic.h"
 #include "make_static.h"
+#include "map.h"
 #include "map_helpers.h"
-#include "mutation.h"
+#include "map_iterator.h"
+#include "map_selector.h"
+#include "mapdata.h"
+#include "memory_fast.h"
+#include "messages.h"
+#include "monster.h"
+#include "npc.h"
 #include "overmapbuffer.h"
-#include "timed_event.h"
+#include "pimpl.h"
+#include "player_activity.h"
 #include "player_helpers.h"
 #include "point.h"
+#include "rng.h"
+#include "talker.h"
+#include "timed_event.h"
+#include "type_id.h"
+
+class recipe;
 
 static const activity_id ACT_ADD_VARIABLE_COMPLETE( "ACT_ADD_VARIABLE_COMPLETE" );
 static const activity_id ACT_ADD_VARIABLE_DURING( "ACT_ADD_VARIABLE_DURING" );
@@ -185,7 +223,7 @@ void check_ter_in_radius( tripoint_abs_ms const &center, int range, ter_id const
 {
     map tm;
     tm.load( project_to<coords::sm>( center - point{ range, range } ), false, false );
-    tripoint_bub_ms const center_local = tm.bub_from_abs( center );
+    tripoint_bub_ms const center_local = tm.get_bub( center );
     for( tripoint_bub_ms p : tm.points_in_radius( center_local, range ) ) {
         if( trig_dist( center_local, p ) <= range ) {
             REQUIRE( tm.ter( p ) == ter );
@@ -200,7 +238,7 @@ void check_ter_in_line( tripoint_abs_ms const &first, tripoint_abs_ms const &sec
     tripoint_abs_ms const orig = coord_min( first, second );
     tm.load( project_to<coords::sm>( orig ), false, false );
     for( tripoint_abs_ms p : line_to( first, second ) ) {
-        REQUIRE( tm.ter( tm.bub_from_abs( p ) ) == ter );
+        REQUIRE( tm.ter( tm.get_bub( p ) ) == ter );
     }
 }
 
@@ -210,10 +248,10 @@ TEST_CASE( "EOC_teleport", "[eoc]" )
 {
     clear_avatar();
     clear_map();
-    tripoint_abs_ms before = get_avatar().get_location();
+    tripoint_abs_ms before = get_avatar().pos_abs();
     dialogue newDialog( get_talker_for( get_avatar() ), nullptr );
     effect_on_condition_EOC_teleport_test->activate( newDialog );
-    tripoint_abs_ms after = get_avatar().get_location();
+    tripoint_abs_ms after = get_avatar().pos_abs();
 
     CHECK( before + tripoint::south_east == after );
 }
@@ -313,7 +351,7 @@ TEST_CASE( "EOC_transform_radius", "[eoc][timed_event]" )
     constexpr time_duration delay = 30_seconds;
     clear_avatar();
     clear_map();
-    tripoint_abs_ms const start = get_avatar().get_location();
+    tripoint_abs_ms const start = get_avatar().pos_abs();
     dialogue newDialog( get_talker_for( get_avatar() ), nullptr );
     check_ter_in_radius( start, eoc_range, ter_t_grass );
     effect_on_condition_EOC_TEST_TRANSFORM_RADIUS->activate( newDialog );
@@ -332,21 +370,22 @@ TEST_CASE( "EOC_transform_radius", "[eoc][timed_event]" )
 
 TEST_CASE( "EOC_transform_line", "[eoc][timed_event]" )
 {
+    map &here = get_map();
     clear_avatar();
     clear_map();
     shared_ptr_fast<npc> guy = make_shared_fast<npc>();
     overmap_buffer.insert_npc( guy );
     npc &npc = *guy;
     clear_character( npc );
-    std::optional<tripoint_bub_ms> const dest = random_point( get_map(), [](
+    std::optional<tripoint_bub_ms> const dest = random_point( here, [](
     tripoint_bub_ms const & p ) {
         return p.xy() != get_avatar().pos_bub().xy();
     } );
     REQUIRE( dest.has_value() );
-    npc.setpos( { dest.value().xy(), get_avatar().posz() } );
+    npc.setpos( here, { dest.value().xy(), get_avatar().posz() } );
 
-    tripoint_abs_ms const start = get_avatar().get_location();
-    tripoint_abs_ms const end = npc.get_location();
+    tripoint_abs_ms const start = get_avatar().pos_abs();
+    tripoint_abs_ms const end = npc.pos_abs();
     dialogue newDialog( get_talker_for( get_avatar() ), get_talker_for( npc ) );
     check_ter_in_line( start, end, ter_t_grass );
     effect_on_condition_EOC_TEST_TRANSFORM_LINE->activate( newDialog );
@@ -754,6 +793,8 @@ TEST_CASE( "EOC_stored_condition_test", "[eoc]" )
 
 TEST_CASE( "dialogue_copy", "[eoc]" )
 {
+    map &here = get_map();
+
     standard_npc dude;
     dialogue d( get_talker_for( get_avatar() ), get_talker_for( &dude ) );
     dialogue d_copy( d );
@@ -763,7 +804,7 @@ TEST_CASE( "dialogue_copy", "[eoc]" )
 
     item hammer( itype_hammer );
     item_location hloc( map_cursor( tripoint_bub_ms::zero ), &hammer );
-    computer comp( "test_computer", 0, tripoint_bub_ms::zero );
+    computer comp( "test_computer", 0, here, tripoint_bub_ms::zero );
     dialogue d2( get_talker_for( hloc ), get_talker_for( comp ) );
     dialogue d2_copy( d2 );
     d2_copy.set_value( "suppress", "1" );
@@ -780,6 +821,8 @@ TEST_CASE( "dialogue_copy", "[eoc]" )
 
 TEST_CASE( "EOC_meta_test", "[eoc]" )
 {
+    map &here = get_map();
+
     global_variables &globvars = get_globals();
     globvars.clear_global_values();
 
@@ -787,7 +830,7 @@ TEST_CASE( "EOC_meta_test", "[eoc]" )
     monster zombie( mon_zombie );
     item hammer( itype_hammer );
     item_location hloc( map_cursor( tripoint_bub_ms::zero ), &hammer );
-    computer comp( "test_computer", 0, tripoint_bub_ms::zero );
+    computer comp( "test_computer", 0, here, tripoint_bub_ms::zero );
 
     dialogue d_empty( std::make_unique<talker>(), std::make_unique<talker>() );
     dialogue d_avatar( get_talker_for( get_avatar() ), std::make_unique<talker>() );
@@ -995,7 +1038,7 @@ TEST_CASE( "EOC_run_inv_test", "[eoc]" )
     clear_avatar();
     clear_map();
 
-    tripoint_abs_ms pos_before = get_avatar().get_location();
+    tripoint_abs_ms pos_before = get_avatar().pos_abs();
     tripoint_abs_ms pos_after = pos_before + tripoint::south_east;
 
     dialogue d( get_talker_for( get_avatar() ), std::make_unique<talker>() );
@@ -1095,11 +1138,11 @@ TEST_CASE( "EOC_run_inv_test", "[eoc]" )
 
     // Activate test for item
     CHECK( effect_on_condition_EOC_item_activate_test->activate( d ) );
-    CHECK( get_map().furn( get_map().bub_from_abs( pos_after ) ) == furn_f_cardboard_box );
+    CHECK( get_map().furn( get_map().get_bub( pos_after ) ) == furn_f_cardboard_box );
 
     // Teleport test for item
     CHECK( effect_on_condition_EOC_item_teleport_test->activate( d ) );
-    CHECK( get_map().i_at( get_map().bub_from_abs( pos_after ) ).size() == 3 );
+    CHECK( get_map().i_at( get_map().get_bub( pos_after ) ).size() == 3 );
 
     // Math function test for armor
     CHECK( effect_on_condition_EOC_armor_math_test->activate( d ) );
@@ -1198,6 +1241,8 @@ TEST_CASE( "EOC_event_test", "[eoc]" )
 
 TEST_CASE( "EOC_combat_event_test", "[eoc]" )
 {
+    map &here = get_map();
+
     size_t loop;
     global_variables &globvars = get_globals();
     globvars.clear_global_values();
@@ -1238,7 +1283,7 @@ TEST_CASE( "EOC_combat_event_test", "[eoc]" )
     for( loop = 0; loop < 1000; loop++ ) {
         arm_shooter( get_avatar(), itype_shotgun_s );
         get_avatar().recoil = 0;
-        get_avatar().fire_gun( target_pos, 1, *get_avatar().get_wielded_item() );
+        get_avatar().fire_gun( here, target_pos, 1, *get_avatar().get_wielded_item() );
         if( !npc_dst_ranged.get_value( "test_event_last_event" ).empty() ) {
             break;
         }
@@ -1257,7 +1302,7 @@ TEST_CASE( "EOC_combat_event_test", "[eoc]" )
     for( loop = 0; loop < 1000; loop++ ) {
         arm_shooter( get_avatar(), itype_shotgun_s );
         get_avatar().recoil = 0;
-        get_avatar().fire_gun( mon_dst_ranged.pos_bub(), 1, *get_avatar().get_wielded_item() );
+        get_avatar().fire_gun( here, mon_dst_ranged.pos_bub(), 1, *get_avatar().get_wielded_item() );
         if( !mon_dst_ranged.get_value( "test_event_last_event" ).empty() ) {
             break;
         }
@@ -1273,7 +1318,7 @@ TEST_CASE( "EOC_combat_event_test", "[eoc]" )
     // character_kills_monster
     clear_map();
     monster &victim = spawn_test_monster( "mon_zombie", target_pos );
-    victim.die( &get_avatar() );
+    victim.die( &here, &get_avatar() );
 
     CHECK( get_avatar().get_value( "test_event_last_event" ) == "character_kills_monster" );
     CHECK( globvars.get_global_value( "victim_type" ) == "mon_zombie" );
@@ -1326,13 +1371,13 @@ TEST_CASE( "EOC_map_test", "[eoc]" )
     clear_map();
 
     map &m = get_map();
-    const tripoint_abs_ms start = get_avatar().get_location();
-    const tripoint_bub_ms tgt = m.bub_from_abs( start + tripoint::north );
+    const tripoint_abs_ms start = get_avatar().pos_abs();
+    const tripoint_bub_ms tgt = m.get_bub( start + tripoint::north );
     m.furn_set( tgt, furn_test_f_eoc );
     m.furn( tgt )->examine( get_avatar(), tgt );
 
     CHECK( globvars.get_global_value( "this" ) == "test_f_eoc" );
-    CHECK( globvars.get_global_value( "pos" ) == m.getglobal( tgt ).to_string() );
+    CHECK( globvars.get_global_value( "pos" ) == m.get_abs( tgt ).to_string() );
 
     const tripoint_bub_ms target_pos = get_avatar().pos_bub() + point::east * 10;
     npc &npc_dst = spawn_npc( target_pos.xy(), "thug" );
@@ -1353,8 +1398,8 @@ TEST_CASE( "EOC_loc_relative_test", "[eoc]" )
     map &m = get_map();
     g->place_player( tripoint_bub_ms::zero );
 
-    const tripoint_abs_ms start = get_avatar().get_location();
-    const tripoint_bub_ms tgt = m.bub_from_abs( start + tripoint::north );
+    const tripoint_abs_ms start = get_avatar().pos_abs();
+    const tripoint_bub_ms tgt = m.get_bub( start + tripoint::north );
     m.furn_set( tgt, furn_test_f_eoc );
     m.furn( tgt )->examine( get_avatar(), tgt );
 
@@ -1367,8 +1412,8 @@ TEST_CASE( "EOC_loc_relative_test", "[eoc]" )
                                     globvars.get_global_value( "map_test_loc_a" ) ) );
     tripoint_abs_ms tmp_abs_b = tripoint_abs_ms( tripoint::from_string(
                                     globvars.get_global_value( "map_test_loc_b" ) ) );
-    CHECK( m.bub_from_abs( tmp_abs_a ) == tripoint_bub_ms( 70, 70, 0 ) );
-    CHECK( m.bub_from_abs( tmp_abs_b ) == tripoint_bub_ms( 70, 60, 0 ) );
+    CHECK( m.get_bub( tmp_abs_a ) == tripoint_bub_ms( 70, 70, 0 ) );
+    CHECK( m.get_bub( tmp_abs_b ) == tripoint_bub_ms( 70, 60, 0 ) );
 
     globvars.clear_global_values();
     clear_avatar();
@@ -1511,12 +1556,12 @@ TEST_CASE( "EOC_run_eocs", "[eoc]" )
     clear_map();
     clear_npcs();
     npc &guy = spawn_npc( u.pos_bub().xy() + point::east, "thug" );
-    tripoint_abs_ms mon_loc = u.get_location() + tripoint::west;
-    monster *zombie = g->place_critter_at( mon_zombie, get_map().bub_from_abs( mon_loc ) );
+    tripoint_abs_ms mon_loc = u.pos_abs() + tripoint::west;
+    monster *zombie = g->place_critter_at( mon_zombie, get_map().get_bub( mon_loc ) );
     REQUIRE( zombie != nullptr );
 
     item hammer( itype_hammer );
-    item_location hammer_loc( map_cursor{ guy.get_location() }, &hammer );
+    item_location hammer_loc( map_cursor{ guy.pos_abs() }, &hammer );
     dialogue d2( get_talker_for( guy ), get_talker_for( hammer_loc ) );
     talker *alpha_talker = d2.actor( false );
     talker *beta_talker = d2.actor( true );

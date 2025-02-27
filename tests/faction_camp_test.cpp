@@ -1,18 +1,21 @@
-#include <cstddef>
-#include <iosfwd>
-#include <utility>
-#include <vector>
+#include <optional>
+#include <string>
 
 #include "basecamp.h"
 #include "cata_catch.h"
+#include "character.h"
 #include "clzones.h"
 #include "coordinates.h"
 #include "faction.h"
+#include "item.h"
+#include "item_components.h"
 #include "map.h"
 #include "map_helpers.h"
-#include "overmap.h"
 #include "overmapbuffer.h"
 #include "player_helpers.h"
+#include "point.h"
+#include "stomach.h"
+#include "type_id.h"
 
 static const itype_id itype_test_100_kcal( "test_100_kcal" );
 static const itype_id itype_test_200_kcal( "test_200_kcal" );
@@ -29,7 +32,7 @@ TEST_CASE( "camp_calorie_counting", "[camp]" )
     clear_avatar();
     clear_map();
     map &m = get_map();
-    const tripoint_abs_ms zone_loc = m.getglobal( tripoint_bub_ms{ 5, 5, 0 } );
+    const tripoint_abs_ms zone_loc = m.get_abs( tripoint_bub_ms{ 5, 5, 0 } );
     mapgen_place_zone( zone_loc, zone_loc, zone_type_CAMP_FOOD, your_fac, {},
                        "food" );
     mapgen_place_zone( zone_loc, zone_loc, zone_type_CAMP_STORAGE, your_fac, {},
@@ -44,7 +47,7 @@ TEST_CASE( "camp_calorie_counting", "[camp]" )
     WHEN( "a base item is added to larder" ) {
         food_supply *= 0;
         item test_100_kcal( itype_test_100_kcal );
-        tripoint_bub_ms zone_local = m.bub_from_abs( zone_loc );
+        tripoint_bub_ms zone_local = m.get_bub( zone_loc );
         m.i_clear( zone_local );
         m.add_item_or_charges( zone_local, test_100_kcal );
         REQUIRE( m.has_items( zone_local ) );
@@ -61,7 +64,7 @@ TEST_CASE( "camp_calorie_counting", "[camp]" )
         made_of.add( test_100_kcal );
         // Setting the actual components. This will return 185 unless it's actually made up of two 100kcal components!
         test_200_kcal.components = made_of;
-        tripoint_bub_ms zone_local = m.bub_from_abs( zone_loc );
+        tripoint_bub_ms zone_local = m.get_bub( zone_loc );
         m.i_clear( zone_local );
         m.add_item_or_charges( zone_local, test_200_kcal );
         test_camp->distribute_food();
@@ -71,7 +74,7 @@ TEST_CASE( "camp_calorie_counting", "[camp]" )
     WHEN( "an item with vitamins is added to larder" ) {
         food_supply *= 0;
         item test_500_kcal( itype_test_500_kcal );
-        tripoint_bub_ms zone_local = m.bub_from_abs( zone_loc );
+        tripoint_bub_ms zone_local = m.get_bub( zone_loc );
         m.i_clear( zone_local );
         m.add_item_or_charges( zone_local, test_500_kcal );
         test_camp->distribute_food();

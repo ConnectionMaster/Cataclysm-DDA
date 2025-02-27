@@ -3,13 +3,14 @@
 #define CATA_SRC_MAGIC_H
 
 #include <functional>
-#include <iosfwd>
 #include <map>
-#include <new>
 #include <optional>
 #include <queue>
 #include <set>
 #include <string>
+#include <string_view>
+#include <unordered_set>
+#include <utility>
 #include <vector>
 
 #include "body_part_set.h"
@@ -22,7 +23,7 @@
 #include "magic_type.h"
 #include "point.h"
 #include "sounds.h"
-#include "translations.h"
+#include "translation.h"
 #include "type_id.h"
 #include "ui.h"
 
@@ -33,7 +34,6 @@ class JsonOut;
 class nc_color;
 class spell;
 class time_duration;
-
 struct dealt_projectile_attack;
 struct requirement_data;
 
@@ -41,11 +41,6 @@ namespace spell_effect
 {
 struct override_parameters;
 } // namespace spell_effect
-
-namespace cata
-{
-class event;
-}  // namespace cata
 template <typename E> struct enum_traits;
 
 enum class spell_flag : int {
@@ -383,6 +378,10 @@ class spell_type
         int exp_for_level( int level ) const;
         // returns the level of this spell type if the spell has the given experience.
         int get_level( int experience ) const;
+        // the maximum level of this spell that can be learned from a book.
+        std::optional<int> get_max_book_level() const;
+        // the base difficulty of the spell, unmodified by character specific spell adjustments
+        int get_difficulty( const Creature &caster ) const;
     private:
         // default values
         static const skill_id skill_default;
@@ -438,6 +437,7 @@ class spell_type
         std::optional<magic_energy_type> energy_source;
         std::optional<jmath_func_id> get_level_formula_id;
         std::optional<jmath_func_id> exp_for_level_formula_id;
+        std::optional<int> max_book_level;
 };
 
 class spell
@@ -636,6 +636,12 @@ class spell
         // difficulty of the level
         int get_difficulty( const Creature &caster ) const;
         mod_id get_src() const;
+
+        std::optional<int> max_book_level() const;
+        double get_failure_cost_percent( Creature &caster ) const;
+        double get_failure_exp_percent( Creature &caster ) const;
+        void consume_spell_cost( Character &caster, bool cast_success = true ) const;
+        std::vector<effect_on_condition_id> get_failure_eoc_ids() const;
 
         // tries to create a field at the location specified
         void create_field( const tripoint_bub_ms &at, Creature &caster ) const;

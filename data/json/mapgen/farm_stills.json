@@ -7,7 +7,6 @@
       [ "farm_stills_8", "farm_stills_7", "farm_stills_6", "farm_stills_5" ],
       [ "farm_stills_12", "farm_stills_11", "farm_stills_10", "farm_stills_9" ]
     ],
-    "weight": 250,
     "object": {
       "fill_ter": "t_floor",
       "rows": [
@@ -264,7 +263,7 @@
         "                        ",
         "                        ",
         "  ####  ####            ",
-        "###.F####.g###          ",
+        "###.â####.g###          ",
         "#............#          ",
         "#a..r..e..c..#          ",
         "#a..r..e..c..#          ",
@@ -286,7 +285,7 @@
         "#####Δ##################",
         "    ###                 "
       ],
-      "palettes": [ "basement_empty" ],
+      "palettes": [ "standard_domestic_basement_palette" ],
       "terrain": { "Δ": "t_ramp_up_high", ".": "t_dirtfloor", "#": "t_wall_log" },
       "furniture": {
         "G": "f_table",

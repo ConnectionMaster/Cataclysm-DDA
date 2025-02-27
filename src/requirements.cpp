@@ -3,11 +3,13 @@
 #include <algorithm>
 #include <climits>
 #include <cstdlib>
+#include <exception>
 #include <iterator>
 #include <limits>
 #include <list>
 #include <memory>
 #include <set>
+#include <sstream>
 #include <stack>
 #include <unordered_map>
 #include <unordered_set>
@@ -16,19 +18,23 @@
 #include "cata_utility.h"
 #include "character.h"
 #include "color.h"
+#include "coordinates.h"
 #include "debug.h"
 #include "debug_menu.h"
 #include "enum_traits.h"
+#include "flexbuffer_json.h"
 #include "generic_factory.h"
 #include "inventory.h"
 #include "item.h"
 #include "item_factory.h"
+#include "item_pocket.h"
+#include "item_tname.h"
 #include "itype.h"
 #include "json.h"
 #include "localized_comparator.h"
 #include "make_static.h"
 #include "output.h"
-#include "point.h"
+#include "pocket_type.h"
 #include "string_formatter.h"
 #include "translations.h"
 #include "value_ptr.h"
@@ -1676,7 +1682,7 @@ deduped_requirement_data::deduped_requirement_data( const requirement_data &in,
         if( alternatives_.size() + pending.size() > max_alternatives ) {
             debugmsg( "Construction of deduped_requirement_data generated too many alternatives.  "
                       "The recipe %1s should be simplified.  See the Recipe section in "
-                      "doc/JSON_INFO.md for more details.  It has %2s alternatives.", context.str(),
+                      "doc/JSON/JSON_INFO.md for more details.  It has %2s alternatives.", context.str(),
                       alternatives_.size() + pending.size() );
             is_too_complex_ = true;
             alternatives_ = { in };

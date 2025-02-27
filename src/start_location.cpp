@@ -2,32 +2,39 @@
 
 #include <algorithm>
 #include <climits>
+#include <functional>
+#include <optional>
 
+#include "assign.h"
 #include "avatar.h"
 #include "bodypart.h"
 #include "calendar.h"
+#include "cata_variant.h"
+#include "character.h"
 #include "city.h"
 #include "clzones.h"
-#include "colony.h"
 #include "coordinates.h"
 #include "creature.h"
 #include "debug.h"
-#include "effect_source.h"
 #include "enum_conversions.h"
+#include "enums.h"
 #include "field_type.h"
-#include "game_constants.h"
+#include "flexbuffer_json.h"
 #include "generic_factory.h"
-#include "json.h"
 #include "map.h"
 #include "map_extras.h"
 #include "map_iterator.h"
 #include "mapdata.h"
-#include "options.h"
+#include "mapgen_parameter.h"
+#include "mapgendata.h"
+#include "mdarray.h"
+#include "omdata.h"
 #include "output.h"
 #include "overmap.h"
 #include "overmapbuffer.h"
 #include "point.h"
 #include "rng.h"
+#include "translations.h"
 
 class item;
 
@@ -302,7 +309,7 @@ std::pair<tripoint_abs_omt, std::unordered_map<std::string, std::string>>
     const std::pair<tripoint_om_omt, omt_types_parameters> random_valid = random_entry( valid,
             std::make_pair( tripoint_om_omt::invalid, omt_types_parameters() ) );
     const tripoint_om_omt omtstart = random_valid.first;
-    if( omtstart.raw() != tripoint::min ) {
+    if( omtstart != tripoint_om_omt::min ) {
         return std::make_pair( project_combine( origin.pos_om, omtstart ), random_valid.second.parameters );
     }
     // Should never happen, if it does we messed up.
@@ -446,7 +453,7 @@ void start_location::place_player( avatar &you, const tripoint_abs_omt &omtstart
     // Need the "real" map with it's inside/outside cache and the like.
     map &here = get_map();
     // Start us off somewhere in the center of the map
-    you.set_location( midpoint( project_bounds<coords::ms>( omtstart ) ) );
+    you.set_pos_abs_only( midpoint( project_bounds<coords::ms>( omtstart ) ) );
     here.invalidate_map_cache( here.get_abs_sub().z() );
     here.build_map_cache( here.get_abs_sub().z() );
     const bool must_be_inside = flags().count( "ALLOW_OUTSIDE" ) == 0;
@@ -473,7 +480,7 @@ void start_location::place_player( avatar &you, const tripoint_abs_omt &omtstart
         if( zone.get_type() == zone_type_ZONE_START_POINT ) {
             if( here.inbounds( zone.get_center_point() ) ) {
                 found_good_spot = true;
-                best_spot = here.bub_from_abs( zone.get_center_point() );
+                best_spot = here.get_bub( zone.get_center_point() );
                 break;
             }
         }
@@ -515,7 +522,7 @@ void start_location::place_player( avatar &you, const tripoint_abs_omt &omtstart
         }
     }
 
-    you.setpos( best_spot );
+    you.setpos( here, best_spot );
 
     if( !found_good_spot ) {
         debugmsg( "Could not find a good starting place for character" );

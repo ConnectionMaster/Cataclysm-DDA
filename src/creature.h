@@ -14,20 +14,19 @@
 #include <string>
 #include <type_traits>
 #include <unordered_map>
-#include <unordered_set>
 #include <utility>
 #include <vector>
 
 #include "bodypart.h"
 #include "calendar.h"
+#include "character_id.h"
 #include "compatibility.h"
-#include "coords_fwd.h"
+#include "coordinates.h"
 #include "damage.h"
 #include "debug.h"
 #include "effect_source.h"
 #include "enums.h"
 #include "pimpl.h"
-#include "point.h"
 #include "string_formatter.h"
 #include "type_id.h"
 #include "units_fwd.h"
@@ -37,21 +36,27 @@
 class Character;
 class JsonObject;
 class JsonOut;
-class anatomy;
 class avatar;
 class body_part_set;
-class character_id;
+class const_talker;
 class effect;
 class effects_map;
+class enchant_cache;
 class field;
 class field_entry;
 class item;
+class map;
 class monster;
 class nc_color;
 class npc;
 class talker;
-class const_talker;
 class translation;
+
+namespace enchant_vals
+{
+enum class mod : int;
+}  // namespace enchant_vals
+
 namespace catacurses
 {
 class window;
@@ -63,8 +68,6 @@ struct projectile;
 struct projectile_attack_results;
 struct trap;
 template <typename T> struct enum_traits;
-
-using anatomy_id = string_id<anatomy>;
 
 enum class creature_size : int {
     // Keep it starting at 1 - damage done to monsters depends on it
@@ -306,23 +309,24 @@ class Creature : public viewer
         virtual bool is_fake() const;
         /** Sets a Creature's fake boolean. */
         virtual void set_fake( bool fake_value );
-        // TODO: fix point types (remove pos() and rename pos_bub() to be the new pos())
-        tripoint pos() const;
         tripoint_bub_ms pos_bub() const;
-        inline int posx() const {
-            return pos_bub().x();
+        tripoint_bub_ms pos_bub( const map &here ) const;
+        inline int posx( const map &here ) const {
+            return pos_bub( here ).x();
         }
-        inline int posy() const {
-            return pos_bub().y();
+        inline int posy( const map &here ) const {
+            return pos_bub( here ).y();
         }
         inline int posz() const {
-            return get_location().z();
+            return pos_abs().z();
         }
         virtual void gravity_check();
-        void setpos( const tripoint_bub_ms &p, bool check_gravity = true );
+        virtual void gravity_check( map *here );
+        void setpos( map &here, const tripoint_bub_ms &p, bool check_gravity = true );
+        void setpos( const tripoint_abs_ms &p, bool check_gravity = true );
 
         /** Checks if the creature fits confortably into a given tile. */
-        bool will_be_cramped_in_vehicle_tile( const tripoint_abs_ms &loc ) const;
+        bool will_be_cramped_in_vehicle_tile( map &here, const tripoint_abs_ms &loc ) const;
         /** Moves the creature to the given location and calls the on_move() handler. */
         void move_to( const tripoint_abs_ms &loc );
 
@@ -337,9 +341,9 @@ class Creature : public viewer
         /** Handles stat and bonus reset. */
         virtual void reset();
         /** Adds an appropriate blood splatter. */
-        virtual void bleed() const;
+        virtual void bleed( map &here ) const;
         /** Empty function. Should always be overwritten by the appropriate player/NPC/monster version. */
-        virtual void die( Creature *killer ) = 0;
+        virtual void die( map *here, Creature *killer ) = 0;
 
         /** Should always be overwritten by the appropriate player/NPC/monster version. */
         virtual float hit_roll() const = 0;
@@ -392,10 +396,9 @@ class Creature : public viewer
          * the other monster is visible.
          */
         /*@{*/
-        bool sees( const Creature &critter ) const override;
-        // TODO: Get rid of untyped overload.
-        bool sees( const tripoint &t, bool is_avatar = false, int range_mod = 0 ) const override;
-        bool sees( const tripoint_bub_ms &t, bool is_avatar = false, int range_mod = 0 ) const override;
+        bool sees( const map &here, const Creature &critter ) const override;
+        bool sees( const map &here, const tripoint_bub_ms &t, bool is_avatar = false,
+                   int range_mod = 0 ) const override;
         /*@}*/
 
         /**
@@ -473,7 +476,8 @@ class Creature : public viewer
 
         // Makes a ranged projectile attack against the creature
         // Sets relevant values in `attack`.
-        virtual void deal_projectile_attack( Creature *source, dealt_projectile_attack &attack,
+        virtual void deal_projectile_attack( map *here, Creature *source, dealt_projectile_attack &attack,
+                                             const double &missed_by = 0,
                                              bool print_messages = true, const weakpoint_attack &wp_attack = weakpoint_attack() );
 
         /**
@@ -536,7 +540,7 @@ class Creature : public viewer
          * This creature just got hit by an attack - possibly special/ranged attack - from source.
          * Players should train dodge, possibly counter-attack somehow.
          */
-        virtual void on_hit( Creature *source, bodypart_id bp_hit,
+        virtual void on_hit( map *here, Creature *source, bodypart_id bp_hit,
                              float difficulty = INT_MIN, dealt_projectile_attack const *proj = nullptr ) = 0;
 
         /** Returns true if this monster has a gun-type attack or the RANGED_ATTACKER flag*/
@@ -546,7 +550,8 @@ class Creature : public viewer
         virtual bool is_on_ground() const = 0;
         bool cant_do_underwater( bool msg = true ) const;
         virtual bool is_underwater() const;
-        bool is_likely_underwater() const; // Should eventually be virtual, although not pure
+        bool is_likely_underwater( const map &here )
+        const; // Should eventually be virtual, although not pure
         virtual bool is_warm() const; // is this creature warm, for IR vision, heat drain, etc
         virtual bool in_species( const species_id & ) const;
 
@@ -608,7 +613,7 @@ class Creature : public viewer
          * much damage has been dealt, how the attack was performed, what has been blocked...), do
          * it *before* calling this function.
          */
-        void check_dead_state();
+        void check_dead_state( map *here );
 
         /** Processes move stopping effects. Returns false if movement is stopped. */
         virtual bool move_effects( bool attacking ) = 0;
@@ -793,9 +798,9 @@ class Creature : public viewer
         tripoint_abs_ms location;
     protected:
         // Sets the creature's position without any side-effects.
-        void set_pos_only( const tripoint_bub_ms &p );
+        void set_pos_bub_only( const map &here, const tripoint_bub_ms &p );
         // Sets the creature's position without any side-effects.
-        void set_location( const tripoint_abs_ms &loc );
+        void set_pos_abs_only( const tripoint_abs_ms &loc );
         // Invoked when the creature's position changes.
         virtual void on_move( const tripoint_abs_ms &old_pos );
         /**anatomy is the plan of the creature's body*/
@@ -1298,15 +1303,15 @@ class Creature : public viewer
          * Returns the location of the creature in map square coordinates (the most detailed
          * coordinate system), relative to a fixed global point of origin.
          */
-        tripoint_abs_ms get_location() const;
+        tripoint_abs_ms pos_abs() const;
         /**
          * Returns the location of the creature in global submap coordinates.
          */
-        tripoint_abs_sm global_sm_location() const;
+        tripoint_abs_sm pos_abs_sm() const;
         /**
          * Returns the location of the creature in global overmap terrain coordinates.
          */
-        tripoint_abs_omt global_omt_location() const;
+        tripoint_abs_omt pos_abs_omt() const;
     protected:
         /**
          * These two functions are responsible for storing and loading the members
@@ -1341,7 +1346,7 @@ class Creature : public viewer
     private:
         int pain;
         // calculate how well the projectile hits
-        double accuracy_projectile_attack( dealt_projectile_attack &attack ) const;
+        double accuracy_projectile_attack( const int &speed, const double &missed_by ) const;
         // what bodypart does the projectile hit
         projectile_attack_results select_body_part_projectile_attack( const projectile &proj,
                 double goodhit, bool magic, double missed_by,

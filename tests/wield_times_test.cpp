@@ -1,9 +1,12 @@
-#include "cata_catch.h"
-
 #include <list>
+#include <optional>
+#include <string>
 
 #include "avatar.h"
 #include "calendar.h"
+#include "cata_catch.h"
+#include "character_attire.h"
+#include "coordinates.h"
 #include "item.h"
 #include "item_location.h"
 #include "map.h"
@@ -54,7 +57,7 @@ static void wield_check_from_ground( avatar &guy, const itype_id &item_name,
 {
     item &spawned_item = get_map().add_item_or_charges( guy.pos_bub(), item( item_name, calendar::turn,
                          1 ) );
-    item_location item_loc( map_cursor( guy.get_location() ), &spawned_item );
+    item_location item_loc( map_cursor( guy.pos_abs() ), &spawned_item );
     CHECK( item_loc.obtain_cost( guy ) == Approx( expected_moves ).epsilon( 0.1f ) );
 }
 

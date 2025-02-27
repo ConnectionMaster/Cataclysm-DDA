@@ -3,12 +3,13 @@
 #define CATA_SRC_ITEM_FACTORY_H
 
 #include <functional>
-#include <iosfwd>
 #include <list>
 #include <map>
 #include <memory>
+#include <optional>
 #include <set>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -301,6 +302,10 @@ class Item_factory
                         const std::string &src );
 
         /**
+        * Load ememory_size, which is automatically calculated for books
+        */
+        void load_ememory_size( const JsonObject &jo, itype &def );
+        /**
          * Load item the item slot if present in json.
          * Checks whether the json object has a member of the given name and if so, loads the item
          * slot from that object. If the member does not exists, nothing is done.
@@ -310,9 +315,7 @@ class Item_factory
                                  std::string_view member, const std::string &src );
 
         void load( islot_tool &slot, const JsonObject &jo, const std::string &src );
-        void load( islot_comestible &slot, const JsonObject &jo, const std::string &src );
         void load( islot_mod &slot, const JsonObject &jo, const std::string &src );
-        void load( islot_gun &slot, const JsonObject &jo, const std::string &src );
         void load( islot_gunmod &slot, const JsonObject &jo, const std::string &src );
         void load( islot_magazine &slot, const JsonObject &jo, const std::string &src );
         void load( islot_bionic &slot, const JsonObject &jo, const std::string &src );
